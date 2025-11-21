@@ -26,7 +26,10 @@
     - Save the file as main.go.
     - Open a terminal in the directory with the file.
     - Run the script: \
-      ```go run main.go --tag_name="<existing or new tag name>" --contains_substring="<substring 1>" --contains_substring="<substring 2>";```
+      ```
+      export JOPLIN_TOKEN="joplin-token";
+      go run main.go --tag_name="<existing or new tag name>" --contains_substring="<substring 1>" --contains_substring="<substring 2>";
+      ```
       ```go run main.go --tag_name="<existing or new tag name>" --contains_substring="<substring>"";```
 
 TODO:

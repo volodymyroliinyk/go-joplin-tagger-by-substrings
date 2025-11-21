@@ -17,8 +17,6 @@ import (
 // JOPLIN API CONFIGURATION
 const (
     JOPLIN_API_BASE = "http://localhost:41184"
-    // REPLACE THIS WITH YOUR TOKEN
-    JOPLIN_TOKEN = "YOUR_JOPLIN_API_TOKEN"
 )
 
 // Structures for parsing API responses
@@ -52,13 +50,13 @@ func (i *ArrayFlags) Set(value string) error {
 // --- API FUNCTIONS (Mostly unchanged from main.go) ---
 
 // fetchData makes a GET request to the Joplin API
-func fetchData(endpoint string) ([]byte, error) {
+func fetchData(endpoint string, token string) ([]byte, error) {
     separator := "?"
     if strings.Contains(endpoint, "?") {
         separator = "&"
     }
 
-    url := fmt.Sprintf("%s%s%stoken=%s", JOPLIN_API_BASE, endpoint, separator, JOPLIN_TOKEN)
+    url := fmt.Sprintf("%s%s%stoken=%s", JOPLIN_API_BASE, endpoint, separator, token)
 
     client := http.Client{Timeout: 10 * time.Second}
     resp, err := client.Get(url)
@@ -79,14 +77,14 @@ func fetchData(endpoint string) ([]byte, error) {
 }
 
 // getAllNotes gets a list of all notes using pagination (Note: now requests 'body' by default)
-func getAllNotes() ([]Note, error) {
+func getAllNotes(token string) ([]Note, error) {
     fmt.Println("-> Get all notes (with pagination)...")
     var notes []Note
     page := 1
 
     for {
         endpoint := fmt.Sprintf("/notes?page=%d&fields=id,title,body", page)
-        body, err := fetchData(endpoint)
+        body, err := fetchData(endpoint, token)
         if err != nil {
             return nil, err
         }
@@ -117,14 +115,14 @@ func getAllNotes() ([]Note, error) {
 }
 
 // getAllTags gets a list of all tags using pagination
-func getAllTags() ([]Tag, error) {
+func getAllTags(token string) ([]Tag, error) {
     fmt.Println("-> Getting all tags (with pagination)...")
     var tags []Tag
     page := 1
 
     for {
         endpoint := fmt.Sprintf("/tags?page=%d", page)
-        body, err := fetchData(endpoint)
+        body, err := fetchData(endpoint, token)
         if err != nil {
             return nil, err
         }
@@ -155,9 +153,9 @@ func getAllTags() ([]Tag, error) {
 }
 
 // getNoteTags gets the IDs of the tags already attached to the note
-func getNoteTags(noteID string) (map[string]bool, error) {
+func getNoteTags(noteID string, token string) (map[string]bool, error) {
     endpoint := fmt.Sprintf("/notes/%s/tags", noteID)
-    body, err := fetchData(endpoint)
+    body, err := fetchData(endpoint, token)
     if err != nil {
         return nil, err
     }
@@ -180,8 +178,8 @@ func getNoteTags(noteID string) (map[string]bool, error) {
 }
 
 // associateTag attaches the tag to the note
-func associateTag(noteID, tagID string) error {
-    url := fmt.Sprintf("%s/tags/%s/notes?token=%s", JOPLIN_API_BASE, tagID, JOPLIN_TOKEN)
+func associateTag(noteID, tagID string, token string) error {
+    url := fmt.Sprintf("%s/tags/%s/notes?token=%s", JOPLIN_API_BASE, tagID, token)
 
     payload := map[string]string{"id": noteID}
     jsonPayload, _ := json.Marshal(payload)
@@ -210,8 +208,8 @@ func associateTag(noteID, tagID string) error {
 }
 
 // createTag creates a new tag and returns its ID
-func createTag(title string) (string, error) {
-    url := fmt.Sprintf("%s/tags?token=%s", JOPLIN_API_BASE, JOPLIN_TOKEN)
+func createTag(title string, token string) (string, error) {
+    url := fmt.Sprintf("%s/tags?token=%s", JOPLIN_API_BASE, token)
 
     payload := map[string]string{"title": title}
     jsonPayload, _ := json.Marshal(payload)
@@ -249,8 +247,9 @@ func createTag(title string) (string, error) {
 // --- MAIN LOGIC ---
 
 func main() {
-    if JOPLIN_TOKEN == "YOUR_JOPLIN_API_TOKEN" {
-        log.Fatal("ERROR: Please replace stub 'YOUR_JOPLIN_API_TOKEN' with your actual API token.")
+    token := os.Getenv("JOPLIN_TOKEN")
+    if token == "" {
+        log.Fatal("ERROR: Environment variable JOPLIN_TOKEN is not set or empty.")
     }
 
     var tagName string
@@ -274,7 +273,7 @@ func main() {
     fmt.Println("---")
 
     // 2. Find or Create Tag
-    allTags, err := getAllTags()
+    allTags, err := getAllTags(token)
     if err != nil {
         log.Fatalf("Critical error getting tags: %v", err)
     }
@@ -292,7 +291,7 @@ func main() {
     // Create a new tag if not found
     if targetTagID == "" {
         fmt.Printf("-> Tag '%s' not found. Creating a new one...\n", tagName)
-        targetTagID, err = createTag(tagName)
+        targetTagID, err = createTag(tagName, token)
         if err != nil {
             log.Fatalf("Critical error creating tag '%s': %v", tagName, err)
         }
@@ -300,7 +299,7 @@ func main() {
     }
 
     // 3. Get all notes
-    allNotes, err := getAllNotes()
+    allNotes, err := getAllNotes(token)
     if err != nil {
         log.Fatalf("Critical error getting notes: %v", err)
     }
@@ -327,7 +326,7 @@ func main() {
             // log.Printf("--- Note processing %d/%d: '%s' (ID: %s) ---", i+1, len(allNotes), note.Title, note.ID)
 
             // Check 2: Is the tag already attached?
-            existingTagIDs, err := getNoteTags(note.ID)
+            existingTagIDs, err := getNoteTags(note.ID, token)
             if err != nil {
                 log.Printf("[Skip note %d/%d '%s']: Failed to get existing tags: %v", i+1, len(allNotes), note.Title, err)
                 continue
@@ -339,7 +338,7 @@ func main() {
             }
 
             // Check 3: Apply the tag
-            err = associateTag(note.ID, targetTagID)
+            err = associateTag(note.ID, targetTagID, token)
             if err != nil {
                 log.Printf("[ERROR] Failed to attach tag '%s' to note'%s': %v", tagName, note.Title, err)
             } else {
